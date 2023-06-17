@@ -443,7 +443,7 @@
 		"securitySchemes": {}
 	},
 	"info": {
-		"title": "@shapeshiftoss/blackfury-api",
+		"title": "@xblackfury/blackfury-api",
 		"version": "9.3.0",
 		"license": {
 			"name": "MIT"
