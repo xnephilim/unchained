@@ -3,18 +3,11 @@ import cors from 'cors'
 import { join } from 'path'
 import { Server } from 'ws'
 import swaggerUi from 'swagger-ui-express'
-import {
-  evm,
-  middleware,
-  ConnectionHandler,
-  Registry,
-  AddressFormatter,
-  BlockHandler,
-  TransactionHandler,
-} from '@shapeshiftoss/common-api'
-import { Tx as BlockbookTx, WebsocketClient, getAddresses, NewBlock } from '@shapeshiftoss/blockbook'
 import { Logger } from '@shapeshiftoss/logger'
-import { gasOracle, service } from './controller'
+import { middleware, ConnectionHandler, Registry, BlockHandler, TransactionHandler } from '@shapeshiftoss/common-api'
+import { getAddresses, NewBlock, Tx as BlockbookTx, WebsocketClient } from '@shapeshiftoss/blockbook'
+import { utxo } from '@shapeshiftoss/common-api'
+import { service, formatAddress } from './controller'
 import { RegisterRoutes } from './routes'
 
 const PORT = process.env.PORT ?? 3000
@@ -22,8 +15,8 @@ const INDEXER_WS_URL = process.env.INDEXER_WS_URL
 
 if (!INDEXER_WS_URL) throw new Error('INDEXER_WS_URL env var not set')
 
-export const logger = new Logger({
-  namespace: ['unchained', 'coinstacks', 'blackfury', 'api'],
+const logger = new Logger({
+  namespace: ['unchained', 'coinstacks', 'litecoin', 'api'],
   level: process.env.LOG_LEVEL,
 })
 
@@ -33,11 +26,13 @@ app.use(json())
 app.use(urlencoded({ extended: true }))
 app.use(cors())
 
-app.get('/health', async (_, res) => res.json({ status: 'up', asset: 'blackfury', connections: wsServer.clients.size }))
+app.get('/health', async (_, res) =>
+  res.json({ status: 'up', network: 'litecoin', connections: wsServer.clients.size })
+)
 
-const options: swaggerUi.SwaggerUiOptions = {
+const options = {
   customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: 'ShapeShift Blackfury API Docs',
+  customSiteTitle: 'ShapeShift Litecoin API Docs',
   customfavIcon: '/public/favi-blue.png',
   swaggerUrl: '/swagger.json',
 }
@@ -56,22 +51,18 @@ app.get('/', async (_, res) => {
 app.use(middleware.errorHandler)
 app.use(middleware.notFoundHandler)
 
-const addressFormatter: AddressFormatter = (address) => evm.formatAddress(address)
-
 const blockHandler: BlockHandler<NewBlock, Array<BlockbookTx>> = async (block) => {
   const txs = await service.handleBlock(block.hash)
   return { txs }
 }
 
-const transactionHandler: TransactionHandler<BlockbookTx, evm.Tx> = async (blockbookTx) => {
-  const tx = await service.handleTransactionWithInternalTrace(blockbookTx)
-  const internalAddresses = (tx.internalTxs ?? []).reduce<Array<string>>((prev, tx) => [...prev, tx.to, tx.from], [])
-  const addresses = [...new Set([...getAddresses(blockbookTx), ...internalAddresses])]
-
+const transactionHandler: TransactionHandler<BlockbookTx, utxo.Tx> = async (blockbookTx) => {
+  const tx = service.handleTransaction(blockbookTx)
+  const addresses = getAddresses(blockbookTx)
   return { addresses, tx }
 }
 
-const registry = new Registry({ addressFormatter, blockHandler, transactionHandler })
+const registry = new Registry({ addressFormatter: formatAddress, blockHandler, transactionHandler })
 
 const server = app.listen(PORT, () => logger.info('Server started'))
 const wsServer = new Server({ server })
@@ -79,6 +70,6 @@ const wsServer = new Server({ server })
 wsServer.on('connection', (connection) => ConnectionHandler.start(connection, registry))
 
 new WebsocketClient(INDEXER_WS_URL, {
-  blockHandler: [registry.onBlock.bind(registry), gasOracle.onBlock.bind(gasOracle)],
+  blockHandler: registry.onBlock.bind(registry),
   transactionHandler: registry.onTransaction.bind(registry),
 })

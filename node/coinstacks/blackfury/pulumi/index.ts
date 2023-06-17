@@ -14,25 +14,7 @@ export = async (): Promise<Outputs> => {
       case 'daemon':
         return {
           ...service,
-          env: { SNAPSHOT: 'https://storage.googleapis.com/oplabs-mainnet-data/mainnet-bedrock.tar' },
-          ports: {
-            'daemon-rpc': { port: 8545 },
-            'daemon-ws': { port: 8546, pathPrefix: '/websocket', stripPathPrefix: true },
-            'daemon-auth': { port: 8551, ingressRoute: false },
-          },
-          configMapData: { 'jwt.hex': readFileSync('../daemon/jwt.hex').toString() },
-          volumeMounts: [{ name: 'config-map', mountPath: '/jwt.hex', subPath: 'jwt.hex' }],
-        }
-
-      case 'op-node':
-        return {
-          ...service,
-          env: {
-            NETWORK: config.network,
-            L1_RPC_ENDPOINT: `http://ethereum-svc.${namespace}.svc.cluster.local:8332`,
-          },
-          ports: { 'op-node-rpc': { port: 9545 } },
-          volumeMounts: [{ name: 'config-map', mountPath: '/jwt.hex', subPath: 'jwt.hex' }],
+          ports: { 'daemon-rpc': { port: 8332 } },
         }
       case 'indexer':
         return {
